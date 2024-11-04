@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link rel="stylesheet" href="./assets/css/bootstrap.min.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Digital Signage Distar</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      height: 100vh;
+      background: #f5faff;
+      display: flex;
+      flex-direction: column;
+      margin: 0;
+      padding: 0;
+    }
+    .header {
+      background: linear-gradient(90deg, #0052cc, #0073e6);
+      color: #fff;
+    }
+    .notification-badge {
+      position: relative;
+    }
+    .notification-badge::after {
+      content: '1';
+      position: absolute;
+      top: -5px;
+      right: -5px;
+      background: red;
+      color: white;
+      font-size: 10px;
+      padding: 2px 5px;
+      border-radius: 50%;
+    }
+
+    /* กำหนดขนาดคงที่สำหรับ canvas-wrapper */
+    #canvasWrapper {
+      width: 800px; /* ขนาดแสดงผลคงที่ */
+      height: 450px; /* ขนาดแสดงผลคงที่ (สำหรับ 16:9) */
+      border: 2px solid #000; /* กรอบ */
+      background-color: #ccc; /* พื้นหลังสีเทา */
+      overflow: auto; /* แสดง Scrollbar เมื่อเนื้อหาภายในเกินขอบเขต */
+      margin-right: 1rem;
+      flex-shrink: 0; /* ป้องกันไม่ให้ขนาดลดลงใน flex container */
+      box-sizing: border-box; /* รวม border ในขนาด */
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    /* ปรับขนาดการแสดงผลของ canvas ให้เติมเต็ม wrapper */
+    #canvas {
+      background-color: #000; /* พื้นหลังสีดำ */
+      /* ขนาดจริงจะถูกตั้งค่าผ่าน JavaScript */
+      display: block; /* ลบ gap ด้านล่างของ canvas */
+      transform-origin: center center; /* จุดเริ่มต้นการแปลงเป็นศูนย์กลาง */
+      transition: transform 0.2s ease; /* เพิ่มการเปลี่ยนแปลงแบบเรียบเนียน */
+    }
+
+    .aspect-ratio-bar {
+      background-color: #f0f8ff;
+      color: #0052cc;
+      padding: 8px 20px;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .content-properties-panel {
+      width: 250px;
+      padding: 20px;
+      border-left: 1px solid #ddd;
+      background-color: #fff;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .content-properties-panel h5 {
+      color: #0052cc;
+      font-weight: bold;
+    }
+    .content-properties-panel label {
+      font-size: 12px;
+      color: #333;
+    }
+    .content-properties-panel input,
+    .content-properties-panel select {
+      width: 100%;
+      padding: 5px;
+      font-size: 12px;
+    }
+
+    /* สไตล์สำหรับ Timeline */
+    .timeline-container {
+      overflow-y: auto;
+    }
+    .timeline-item.selected {
+      background-color: #e0e0e0;
+    }
+
+    /* Layout Flexbox สำหรับ Main Content Area */
+    .main-content {
+      display: flex;
+      flex-grow: 1;
+      align-items: flex-start; /* ปรับให้เริ่มต้นที่ด้านบน */
+      padding: 10px;
+      box-sizing: border-box;
+    }
+
+    /* Additional styles for Zoom Controls */
+    #zoomControls {
+      margin-left: 20px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    #zoomSelect {
+      padding: 5px;
+      font-size: 14px;
+    }
+
+    /* สไตล์สำหรับ Custom Resolution */
+    #customResolution {
+      display: none; /* ซ่อนโดยค่าเริ่มต้น */
+      margin-left: 10px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    #customResolution input {
+      width: 80px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <div class="header d-flex justify-content-between align-items-center px-3 py-2">
+    <div class="d-flex align-items-center gap-3">
+      <div class="logo fs-3 fw-bold">DiStar</div>
+      <span class="fs-5">File</span>
+    </div>
+    <div class="menu d-flex gap-3">
+      <button class="btn btn-outline-light rounded-pill">Content</button>
+      <button class="btn btn-outline-light rounded-pill">Schedule</button>
+      <button class="btn btn-outline-light rounded-pill">Player</button>
+      <button class="btn btn-outline-light rounded-pill">Report</button>
+    </div>
+    <div class="user-menu d-flex align-items-center gap-3">
+      <span>EN ⌄</span>
+      <span class="notification-badge">🔔</span>
+      <span>👤</span>
+    </div>
+  </div>
+
+  <!-- Aspect Ratio Bar -->
+  <div class="aspect-ratio-bar">
+    <div class="d-flex gap-3 align-items-center">
+      <button id="mediaButton" class="btn btn-primary btn-sm" style="width: 100px; font-weight: bold;">Media</button>
+      <input id="fileInput" type="file" accept="video/*,image/*" style="display:none;">
+    </div>
+    <div class="d-flex align-items-center gap-3">
+      <div class="d-flex align-items-center">
+        <select id="resolutionSelect" class="btn btn-outline-primary btn-sm">
+          <option value="16:9">16:9</option>
+          <option value="4:3">4:3</option>
+          <option value="1:1">1:1</option>
+          <option value="16:10">16:10</option>
+          <option value="custom">Custom</option>
+        </select>
+        <span class="text-primary" id="currentResolution">16:9 (1920x1080 px)</span>
+      </div>
+      <div id="zoomControls">
+        <label for="zoomSelect" style="font-size: 12px;">Zoom:</label>
+        <select id="zoomSelect" class="btn btn-outline-primary btn-sm">
+          <option value="0.25">25%</option>
+          <option value="0.4">40%</option>
+          <option value="0.5">50%</option>
+          <option value="0.6">60%</option>
+          <option value="0.75">75%</option>
+          <option value="1" selected>100%</option>
+          <option value="1.5">150%</option>
+          <option value="2">200%</option>
+          <option value="3">300%</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Content Area -->
+  <div class="main-content">
+    <!-- ห่อหุ้ม canvas ด้วย canvas-wrapper ที่มี ID เพื่อปรับขนาดได้ -->
+    <div id="canvasWrapper">
+      <canvas id="canvas"></canvas>
+    </div>
+
+    <!-- Content Properties Panel -->
+    <div class="content-properties-panel">
+      <h5>Content Properties</h5>
+      <label for="positionX">Position X</label>
+      <input type="number" id="positionX" placeholder="0">
+      <label for="positionY">Position Y</label>
+      <input type="number" id="positionY" placeholder="0">
+      <label for="width">Width</label>
+      <input type="number" id="width" placeholder="1920">
+      <label for="height">Height</label>
+      <input type="number" id="height" placeholder="1080">
+      <label for="opacity">Opacity</label>
+      <input type="range" id="opacity" min="0" max="100" value="100">
+    </div>
+  </div>
+
+  <!-- Timeline Section -->
+  <div class="timeline-container p-3 border-top border-primary">
+    <div class="timeline-header d-flex align-items-center gap-3 text-primary mb-2">
+      <span class="btn btn-link p-0">+ Add Page</span>
+      <span class="btn btn-link p-0">🗑</span>
+      <span>Zoom: 100%</span>
+      <div class="timeline-controls d-flex justify-content-center flex-grow-1">
+        <button id="rewindButton" class="btn btn-outline-primary btn-sm">⏪</button>
+        <button id="playButton" class="btn btn-outline-primary btn-sm">▶</button>
+        <button id="pauseButton" class="btn btn-outline-primary btn-sm">⏸</button>
+      </div>
+      <span>00:00:00 / 00:00:00</span>
+    </div>
+    <div id="timeline" class="timeline"></div>
+  </div>
+
+  <!-- Custom Resolution Modal -->
+  <div class="modal fade" id="customResolutionModal" tabindex="-1" aria-labelledby="customResolutionModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="customResolutionModalLabel">Custom Resolution</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <form id="customResolutionForm">
+            <div class="mb-3">
+              <label for="customWidth" class="form-label">Width (px)</label>
+              <input type="number" class="form-control" id="customWidth" placeholder="Width" required>
+            </div>
+            <div class="mb-3">
+              <label for="customHeight" class="form-label">Height (px)</label>
+              <input type="number" class="form-control" id="customHeight" placeholder="Height" required>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" id="confirmCustomResolution" class="btn btn-primary">OK</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Import Media Modal (สำหรับ Timeline Item) -->
+  <div class="modal fade" id="importMediaModal" tabindex="-1" aria-labelledby="importMediaModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="importMediaModalLabel">Import Media</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <input type="file" id="timelineFileInput" accept="video/*,image/*" class="form-control">
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" id="confirmTimelineImport" class="btn btn-primary">Import</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="renderer.js"></script>
+  <script src="./assets/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
